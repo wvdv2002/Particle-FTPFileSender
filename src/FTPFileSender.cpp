@@ -1,7 +1,5 @@
 #include "FTPFileSender.h"
 
-
-
 FileSender::FileSender(String aServer, String anUser, String aPasswd, uint16_t aPort){
   ftp = ParticleFtpClient();
   ftpServer = aServer;
