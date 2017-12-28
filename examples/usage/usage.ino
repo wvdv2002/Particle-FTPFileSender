@@ -36,7 +36,7 @@ FileSender fileSend("0.0.0.0","USERNAME","PASSWORD",21);
 void setup() {
 	
 	Particle.function("sendFile",funcPostFile);
-  if (!sd.begin(SDCARD_CS, SPI_FULL_SPEED)) {
+  if (!sd.begin(chipSelect, SPI_FULL_SPEED)) {
     Particle.publish("sysmessage","No SD card Found");
   }
 }
