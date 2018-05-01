@@ -1,8 +1,8 @@
-#ifndef __FILESENDER_H__
-#define __FILESENDER_H__
+#ifndef __FTPFILESENDER_H__
+#define __FTPFILESENDER_H__
 
 #include "application.h"
-#include "CompressFile.h"
+#include "compressFile.h"
 #include "SdFat.h"
 #include "ParticleFtpClient.h"
 

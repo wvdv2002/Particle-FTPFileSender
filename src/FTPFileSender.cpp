@@ -1,4 +1,4 @@
-#include "FileSender.h"
+#include "FTPFileSender.h"
 
 
 

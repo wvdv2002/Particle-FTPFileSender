@@ -1,6 +1,6 @@
 # FTPFileSender
 
-A Particle library, FTPFileSender, to send compressed files over FTP to a ftp server.
+A Particle library, FTPFileSender, to send compressed and receive uncompressed files over FTP to/from a ftp server.
 Using this library you can call a function on a particle device and the Particle will compress and then send a file to the designated FTP server.
 
 ## Getting started
