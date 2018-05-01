@@ -36,6 +36,7 @@ FileSender fileSend("0.0.0.0","USERNAME","PASSWORD",21);
 void setup() {
 	
 	Particle.function("sendFile",funcPostFile);
+	Particle.function("getFile",funcGetFile);
   if (!sd.begin(chipSelect, SPI_FULL_SPEED)) {
     Particle.publish("sysmessage","No SD card Found");
   }
@@ -54,3 +55,14 @@ int funcPostFile(String command){
   }
   return (int) fileSend.sendFile(command);
 }
+
+//Call this function using particle call "name" getFile "/path/to/file" to get a file from the sd card. It will create the same directory structure on the SD card.
+//Call this function using particle call "name" getFile "status" to get the status string.
+int funcGetFile(String command){
+  if (command=="status"){
+    Particle.publish("sysmessage",fileSend.toString());
+    return 0;
+  }
+  return (int) fileSend.getFile(command,command);
+}
+

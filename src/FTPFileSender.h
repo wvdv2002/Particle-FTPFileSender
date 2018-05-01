@@ -2,7 +2,7 @@
 #define __FILESENDER_H__
 
 #include "application.h"
-#include "compressFile.h"
+#include "CompressFile.h"
 #include "SdFat.h"
 #include "ParticleFtpClient.h"
 
@@ -12,6 +12,7 @@ typedef enum filesenderstate{
   FILESENDER_IDLE,
   FILESENDER_COMPRESSING,
   FILESENDER_SENDING,
+  FILESENDER_GETTING,
   FILESENDER_DONE,
   FILESENDER_ERROR,
 }fileSenderState;
@@ -22,6 +23,7 @@ typedef enum filesendererror{
   FILESENDER_COMPRESSERROR,
   FILESENDER_FTPNOTFOUND,
   FILESENDER_FTPSENDERROR,
+  FILESENDER_FTPGETERROR,
   FILESENDER_FELLOUTOFSTATEMACHINE,
   FILESENDER_BUSY,
 }fileSenderError;
@@ -33,6 +35,12 @@ typedef enum ftpsendstate{
   FTPSENDUSER,
   FTPSENDPASSWD,
   FTPMKDIRS,
+  FTPCHDIRS,
+  FTPSTARTGETDATA,
+  FTPGETDATA,
+  FTPGETFINISH,
+  FTPGETCHECKSIZE,
+  FTPGETQUIT,
   FTPSTARTSENDDATA,
   FTPSENDDATA,
   FTPSENDFINISH,
@@ -46,7 +54,7 @@ class FileSender{
 private:
   fileSenderState state;
   fileSenderError error;
-  SdFile outFile;
+  File outFile;
   CompressFile compress;
   ParticleFtpClient ftp;
   String ftpPasswd;
@@ -54,8 +62,10 @@ private:
   String ftpUser;
   uint16_t ftpPort;
   String fileToSend;
+  String fileToSave;
   ftpSendState ftpState;
   ftpSendState ftpError;
+  int _getSize;
   void ftpSendTask(void);
   bool ftpStartSend(void);
   void ftpThrowError(void);
@@ -68,6 +78,7 @@ public:
   void begin(void);
   String toString(void);
   fileSenderError sendFile(String);
+  fileSenderError getFile(String,String);
   fileSenderState getStatus(void);
   fileSenderError getError(void);
   ftpSendState getFTPState(void);

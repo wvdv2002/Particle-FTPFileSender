@@ -1,4 +1,6 @@
-#include "FTPFileSender.h"
+#include "FileSender.h"
+
+
 
 FileSender::FileSender(String aServer, String anUser, String aPasswd, uint16_t aPort){
   ftp = ParticleFtpClient();
@@ -38,13 +40,18 @@ void FileSender::task(void){
       }
     break;
     case FILESENDER_SENDING:
+    case FILESENDER_GETTING:
       ftpSendTask();
       if (ftpState==FTPDONE){
           state = FILESENDER_DONE;
       }
       else if(ftpState == FTPERROR){
+        if(state == FILESENDER_GETTING){
+          error = FILESENDER_FTPGETERROR;
+        }else{
+          error = FILESENDER_FTPSENDERROR;
+        }
         state = FILESENDER_ERROR;
-        error = FILESENDER_FTPSENDERROR;
       }
     break;
     case FILESENDER_DONE:
@@ -59,6 +66,11 @@ void FileSender::task(void){
 }
 
 void FileSender::ftpThrowError(void){
+  if(outFile.isOpen() && (state==FILESENDER_GETTING)){
+    outFile.remove();
+  }else{
+    outFile.close();
+  }
   ftpError = ftpState;
   ftpState = FTPERROR;
 }
@@ -99,31 +111,58 @@ void FileSender::ftpSendTask(void){
     case FTPIDLE:
       break;
     case FTPCONNECT:
-      if(ftp.open(ftpServer,5)){
+      if(ftp.open(ftpServer,ftpPort,5)){
         ftpState = FTPSENDUSER;
-      }
-      else
-      {
+      }else{
         ftpThrowError();
       }
       break;
     case FTPSENDUSER:
       if(ftp.user(ftpUser)){
         ftpState = FTPSENDPASSWD;
-      }
-      else
-      {
+      }else{
         ftpThrowError();
       }
       break;
     case FTPSENDPASSWD:
       if(ftp.pass(ftpPasswd)){
-        ftpState = FTPMKDIRS;
+        if(state == FILESENDER_SENDING){
+          ftpState = FTPMKDIRS;
+        }else{
+          ftpState = FTPCHDIRS;
+        }
       }
       else{
         ftpThrowError();
       }
       break;
+
+    case FTPCHDIRS:
+    {
+      String temp;
+      if(fileToSend.startsWith("/")){
+        temp=fileToSend.substring(1);
+      } else {
+      temp = fileToSend;
+      }
+      while(temp.indexOf('/')!=-1){
+          if(!ftp.cwd(temp.substring(0,temp.indexOf('/')))){
+            ftpThrowError();
+            break;
+          }
+          temp=temp.substring(temp.indexOf('/')+1);
+      }
+      if(!ftp.type("I")){
+        ftpThrowError();
+      }
+      _getSize = ftp.size(temp);
+      if(!ftp.retr(temp)){
+        ftpThrowError();
+      }else{
+        ftpState = FTPSTARTGETDATA;
+      }
+    }
+    break;
     case FTPMKDIRS:
       {
         String temp;
@@ -148,6 +187,16 @@ void FileSender::ftpSendTask(void){
           ftpState = FTPSTARTSENDDATA;
         }
       }break;
+    case FTPSTARTGETDATA:
+      if(!outFile.isOpen()){
+        if(!outFile.open(fileToSave,O_WRITE | O_CREAT | O_TRUNC)){
+          ftpThrowError();
+        }
+      }
+      if(ftpState != FTPERROR){
+        ftpState = FTPGETDATA;
+      }
+      break;
     case FTPSTARTSENDDATA:
       if(!outFile.isOpen()){
         if(!outFile.open("/temp.lz",O_READ)){
@@ -156,6 +205,24 @@ void FileSender::ftpSendTask(void){
       }
       ftpState = FTPSENDDATA;
       break;
+    case FTPGETDATA:
+    {
+      byte buf[512];
+      int len=512;
+      int writeLen;
+      if(ftp.data.connected()){
+        if(ftp.data.available()){
+          len = ftp.data.read(buf,len);
+          writeLen = outFile.write(buf,len);
+          if (len!=writeLen){
+            ftpThrowError();
+          }
+        }
+      }else{
+        ftpState = FTPGETCHECKSIZE;
+      }
+    }
+    break;
     case FTPSENDDATA:
       {
         byte buf[512];
@@ -169,7 +236,25 @@ void FileSender::ftpSendTask(void){
 		  outFile.close();
           ftpState = FTPSENDFINISH;
         }
-      }break;
+      }
+    break;
+    case FTPGETFINISH:
+      if(!ftp.finish()){
+        ftpThrowError();
+      }else{
+        ftpState = FTPGETCHECKSIZE;
+      }
+    break;
+    case FTPGETCHECKSIZE:
+    {
+      if(_getSize != outFile.size()){
+        ftpThrowError();
+      }else{
+        outFile.close();
+        ftpState = FTPGETQUIT;
+      }
+    }
+    break;
     case FTPSENDFINISH:
       if(!ftp.finish()){
         ftpThrowError();
@@ -178,11 +263,13 @@ void FileSender::ftpSendTask(void){
         ftpState = FTPSENDQUIT;
       }
       break;
+    case FTPGETQUIT:
     case FTPSENDQUIT:
       if(!ftp.quit()){
-        ftpState = FTPERROR;
+        ftpThrowError();
+      }else{
+        ftpState = FTPDONE;
       }
-      ftpState = FTPDONE;
       break;
     case FTPDONE:
       break;
@@ -196,9 +283,10 @@ void FileSender::ftpSendTask(void){
 }
 
 void FileSender::clearError(void){
-  outFile.close();
   state=FILESENDER_IDLE;
   error=FILESENDER_NOERROR;
+  ftpState = FTPIDLE;
+  ftpError = FTPIDLE;
 }
 
 fileSenderError FileSender::getError(void){
@@ -213,7 +301,7 @@ fileSenderError FileSender::sendFile(String aFileString){
   if(!(state == FILESENDER_IDLE || state == FILESENDER_ERROR || state == FILESENDER_DONE)){
     return FILESENDER_BUSY;
   }
-
+  clearError();
   if(!outFile.open(aFileString,O_READ)){
     return FILESENDER_FILENOTFOUND;
   }
@@ -224,6 +312,26 @@ fileSenderError FileSender::sendFile(String aFileString){
   error=FILESENDER_NOERROR;
   return error;
 }
+
+
+fileSenderError FileSender::getFile(String aWriteFileString, String aReadFileString){
+  if(!(state == FILESENDER_IDLE || state == FILESENDER_ERROR || state == FILESENDER_DONE)){
+    return FILESENDER_BUSY;
+  }
+
+  fileToSend = aReadFileString;
+  fileToSave = aWriteFileString;
+  state=FILESENDER_GETTING;
+  error=FILESENDER_NOERROR;
+  ftpStartSend();
+  return error;
+}
+
+
+
+
+
+
 
 String FileSender::statusString(void){
   switch(getStatus()){
@@ -236,6 +344,8 @@ String FileSender::statusString(void){
     case FILESENDER_SENDING:
       return "FS_SENDI";
     break;
+    case FILESENDER_GETTING:
+      return "FS_GETT";
     case FILESENDER_DONE:
       return "FS_DONE";
     break;
@@ -243,7 +353,7 @@ String FileSender::statusString(void){
       return "FS_ERROR";
     break;
   }
-  return "FS_NOTFOUND";
+  return "FS_STATENF";
 }
 
 String FileSender::errorString(void){
@@ -263,6 +373,9 @@ String FileSender::errorString(void){
     case FILESENDER_FTPSENDERROR:
       return "FS_FTPSENDERR";
     break;
+    case FILESENDER_FTPGETERROR:
+      return "FS_FTPGETERR";
+    break;
     case FILESENDER_FELLOUTOFSTATEMACHINE:
       return "FS_FELLSM";
     break;
@@ -274,10 +387,15 @@ String FileSender::errorString(void){
 }
 
 String FileSender::toString(void){
+    int aFileSize = 0;
+    if(outFile.isOpen()){
+      aFileSize = outFile.size();
+    }
     return String("FTP: ") + statusString() + "," + errorString() + " " +
     String((int) getStatus()) + "," +
     String((int) getError()) + "," +
     String((int) getFTPState())+ "," +
     String((int) getFTPError()) + "," +
-    String((int) getCompressState());
+    String((int) getCompressState()) + "," + String(aFileSize);
+
 }
