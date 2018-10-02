@@ -31,7 +31,6 @@ In the [linux](examples/linux) folder in examples is an example script on how to
 
 ## Contributing
 * There is no option to send files uncompressed for now. This might be a useful addition.
-* There is no option to download files from the same ftp server.
 * A nice update would be to let the user instantiate the particleftpclient and add a reference in the ftpfilesender constructor, so the ftp client can be used for more things than only file sending.
 * Another nice update would be to be able to upload a file with the complete file structure on the sd card.
 
